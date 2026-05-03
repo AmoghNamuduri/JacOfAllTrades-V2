@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>JOATberg Terminal</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; display: flex; height: 100vh; overflow: hidden; }
+
+#chat-panel { width: 380px; min-width: 380px; background: #1a1d27; display: flex; flex-direction: column; border-right: 1px solid #2e3147; }
+#chat-header { padding: 14px 18px; background: #12151f; border-bottom: 1px solid #2e3147; display: flex; align-items: center; justify-content: space-between; }
+#chat-header h2 { font-size: 14px; color: #7c83ff; font-weight: 600; }
+#agent-status { font-size: 10px; padding: 3px 8px; border-radius: 10px; font-weight: 600; }
+#agent-status.connected { background: #4caf7d22; color: #4caf7d; border: 1px solid #4caf7d44; }
+#agent-status.disconnected { background: #f0606022; color: #f06060; border: 1px solid #f0606044; }
+
+#test-cases { padding: 10px 12px; border-bottom: 1px solid #2e3147; background: #12151f; }
+#test-cases p { font-size: 10px; color: #555; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+#test-btns { display: flex; flex-wrap: wrap; gap: 4px; }
+.test-btn { background: #1a1d27; border: 1px solid #2e3147; color: #7c83ff; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; }
+.test-btn:hover { background: #7c83ff22; }
+
+#messages { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.msg { max-width: 94%; padding: 8px 12px; border-radius: 10px; font-size: 11px; line-height: 1.6; }
+.msg.user { background: #7c83ff; color: #fff; align-self: flex-end; border-bottom-right-radius: 3px; }
+.msg.agent { background: #252836; color: #ccc; align-self: flex-start; border: 1px solid #2e3147; border-bottom-left-radius: 3px; }
+.msg.loading { background: #1e2130; color: #555; align-self: flex-start; border: 1px solid #2e3147; border-radius: 10px; padding: 8px 12px; font-size: 11px; font-style: italic; }
+.msg.error { background: #f0606011; color: #f06060; align-self: flex-start; border: 1px solid #f0606033; border-radius: 10px; padding: 8px 12px; font-size: 11px; }
+
+.reasoning-block { margin-top: 6px; background: #1a1d27; border: 1px solid #2e3147; border-radius: 6px; overflow: hidden; }
+.reasoning-toggle { padding: 5px 8px; font-size: 10px; color: #7c83ff; cursor: pointer; display: flex; justify-content: space-between; }
+.reasoning-body { display: none; padding: 6px 8px; border-top: 1px solid #2e3147; }
+.reasoning-body.open { display: block; }
+.reasoning-step { margin-bottom: 6px; padding: 5px 7px; border-radius: 4px; background: #12151f; font-size: 10px; line-height: 1.5; }
+.role-proposer { color: #7c83ff; font-weight: 600; }
+.role-validator { color: #f0a050; font-weight: 600; }
+.role-judge { color: #4caf7d; font-weight: 600; }
+.role-test { color: #aaa; font-weight: 600; }
+
+#metrics-panel { padding: 8px 12px; border-bottom: 1px solid #2e3147; background: #12151f; display: none; }
+#metrics-panel p { font-size: 10px; color: #555; margin-bottom: 4px; text-transform: uppercase; }
+#metrics-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.metric-chip { background: #252836; border: 1px solid #2e3147; border-radius: 6px; padding: 4px 8px; font-size: 10px; color: #ccc; }
+.metric-chip span { color: #7c83ff; font-weight: 600; }
+
+#input-area { padding: 10px; border-top: 1px solid #2e3147; display: flex; flex-direction: column; gap: 6px; }
+#input-row { display: flex; gap: 6px; }
+#user-input { flex: 1; background: #252836; border: 1px solid #2e3147; border-radius: 8px; padding: 9px 11px; color: #e0e0e0; font-size: 11px; outline: none; }
+#user-input:focus { border-color: #7c83ff; }
+#user-input:disabled { opacity: 0.4; }
+#send-btn { background: #7c83ff; color: #fff; border: none; border-radius: 8px; padding: 9px 14px; cursor: pointer; font-size: 11px; font-weight: 600; }
+#send-btn:disabled { background: #2e3147; color: #555; cursor: not-allowed; }
+.hint { font-size: 10px; color: #444; text-align: center; }
+
+#dashboard-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#dash-header { padding: 12px 18px; background: #12151f; border-bottom: 1px solid #2e3147; display: flex; align-items: center; justify-content: space-between; }
+#dash-header h1 { font-size: 14px; color: #e0e0e0; font-weight: 600; }
+#dash-actions { display: flex; gap: 8px; align-items: center; }
+#chart-count { font-size: 10px; color: #555; }
+#download-btn { background: #4caf7d; border: none; color: #fff; padding: 5px 14px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; }
+#download-btn:disabled { background: #2e3147; color: #555; cursor: not-allowed; }
+
+#charts-grid { flex: 1; overflow-y: auto; padding: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(500px, 1fr)); gap: 14px; align-content: start; }
+
+.chart-card { background: #1a1d27; border: 1px solid #2e3147; border-radius: 12px; overflow: hidden; }
+.chart-card-header { padding: 9px 13px; background: #12151f; border-bottom: 1px solid #2e3147; display: flex; align-items: center; gap: 8px; }
+.chart-title { font-size: 11px; color: #aaa; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chart-badge { background: #7c83ff22; color: #7c83ff; font-size: 9px; padding: 2px 7px; border-radius: 8px; border: 1px solid #7c83ff44; white-space: nowrap; }
+.chart-card-actions { display: flex; gap: 4px; }
+.alt-btn { background: #1a1d27; border: 1px solid #2e3147; color: #888; padding: 2px 7px; border-radius: 4px; cursor: pointer; font-size: 9px; }
+.alt-btn:hover { border-color: #7c83ff; color: #7c83ff; }
+.remove-btn { background: none; border: none; color: #444; cursor: pointer; font-size: 13px; padding: 0 2px; }
+.remove-btn:hover { color: #f06060; }
+.chart-plot { width: 100%; height: 340px; }
+.chart-modify-area { padding: 9px 13px; border-top: 1px solid #2e3147; display: flex; gap: 6px; }
+.chart-modify-area input { flex: 1; background: #252836; border: 1px solid #2e3147; border-radius: 6px; padding: 6px 9px; color: #e0e0e0; font-size: 10px; outline: none; }
+.chart-modify-area input:focus { border-color: #7c83ff; }
+.modify-btn { background: #7c83ff; border: none; color: #fff; border-radius: 6px; padding: 6px 11px; cursor: pointer; font-size: 10px; white-space: nowrap; }
+.modify-btn:disabled { background: #2e3147; color: #555; }
+.code-toggle { padding: 5px 13px; border-top: 1px solid #2e3147; font-size: 10px; color: #555; cursor: pointer; display: flex; justify-content: space-between; }
+.code-toggle:hover { color: #7c83ff; }
+.code-block { display: none; padding: 8px 13px; border-top: 1px solid #2e3147; background: #0f1117; }
+.code-block.open { display: block; }
+.code-block pre { font-size: 10px; color: #7c83ff; white-space: pre-wrap; line-height: 1.5; font-family: monospace; }
+
+#empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #333; gap: 10px; text-align: center; }
+#empty-state p { font-size: 12px; line-height: 1.6; }
+
+#pdf-overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); align-items: center; justify-content: center; z-index: 100; }
+#pdf-overlay.show { display: flex; }
+#pdf-box { background: #1a1d27; border: 1px solid #2e3147; border-radius: 12px; padding: 28px 36px; text-align: center; }
+#pdf-box p { font-size: 12px; color: #aaa; margin-top: 8px; }
+.spinner { width: 24px; height: 24px; border: 2px solid #2e3147; border-top-color: #7c83ff; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="chat-panel">
+  <div id="chat-header">
+    <div>
+      <h2>JOATberg Terminal</h2>
+    </div>
+    <span id="agent-status" class="disconnected">offline</span>
+  </div>
+
+  <div id="test-cases">
+    <p>Test cases</p>
+    <div id="test-btns">
+      <button class="test-btn" onclick="runTest('synthdata6')">Risk Assessment</button>
+      <button class="test-btn" onclick="runTest('synthdata7')">META Deep Dive</button>
+      <button class="test-btn" onclick="runTest('synthdata8')">Rebalancing</button>
+      <button class="test-btn" onclick="runTest('synthdata9')">META vs PLTR</button>
+      <button class="test-btn" onclick="runTest('synthdata1')">Synth 1</button>
+      <button class="test-btn" onclick="runTest('synthdata2')">Synth 2</button>
+      <button class="test-btn" onclick="runTest('synthdata4')">Synth 4</button>
+      <button class="test-btn" onclick="runTest('synthdata5')">Synth 5</button>
+    </div>
+  </div>
+
+  <div id="metrics-panel">
+    <p>Key metrics</p>
+    <div id="metrics-grid"></div>
+  </div>
+
+  <div id="messages">
+    <div class="msg agent">
+      Hi! Use the test cases above to run the pipeline on synthetic data, or type a prompt to call the live agent.<br><br>
+      After a chart renders, use the modify box to reprompt the chart code.
+    </div>
+  </div>
+
+  <div id="input-area">
+    <div id="input-row">
+      <input id="user-input" type="text" placeholder="Ask about your portfolio..." onkeydown="if(event.key==='Enter')sendMessage()"/>
+      <button id="send-btn" onclick="sendMessage()">Send</button>
+    </div>
+    <div class="hint" id="input-hint">Checking connection...</div>
+  </div>
+</div>
+
+<div id="dashboard-panel">
+  <div id="dash-header">
+    <h1>Dashboard</h1>
+    <div id="dash-actions">
+      <span id="chart-count"></span>
+      <button id="download-btn" onclick="downloadPDF()" disabled>Download PDF</button>
+    </div>
+  </div>
+  <div id="charts-grid">
+    <div id="empty-state">
+      <p>No charts yet.<br>Run a test case or type a prompt.</p>
+    </div>
+  </div>
+</div>
+
+<div id="pdf-overlay">
+  <div id="pdf-box">
+    <div class="spinner"></div>
+    <p>Generating PDF...</p>
+  </div>
+</div>
+
+<script>
+const JAC = "http://localhost:8000";
+let charts = [];
+let sessionId = "session-" + Date.now();
+
+// ── Connection check ──────────────────────────────────────────────────────────
+async function checkConnection() {
+  try {
+    const res = await fetch(`${JAC}/healthz`);
+    setStatus(res.ok);
+  } catch { setStatus(false); }
+}
+
+function setStatus(ok) {
+  const el = document.getElementById('agent-status');
+  const hint = document.getElementById('input-hint');
+  el.textContent = ok ? 'Jac online' : 'Jac offline';
+  el.className = ok ? 'connected' : 'disconnected';
+  hint.textContent = ok
+    ? 'Ready — type a prompt or run a test case'
+    : 'Run: jac serve main.jac in a terminal';
+}
+
+checkConnection();
+setInterval(checkConnection, 5000);
+
+// ── Messaging ─────────────────────────────────────────────────────────────────
+function addMsg(html, type) {
+  const el = document.createElement('div');
+  el.className = `msg ${type}`;
+  el.innerHTML = html;
+  const msgs = document.getElementById('messages');
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+  return el;
+}
+
+function renderReasoningChain(chain) {
+  if (!chain || !chain.length) return '';
+  const steps = chain.map(step => {
+    const role = step.role || '';
+    const cls = role === 'proposer' ? 'role-proposer'
+              : role === 'validator' ? 'role-validator'
+              : role === 'judge' ? 'role-judge'
+              : 'role-test';
+    let detail = '';
+    if (role === 'proposer') detail = `Charts: ${(step.chart_types||[]).join(', ')} — ${(step.reasoning||'').slice(0,120)}`;
+    if (role === 'validator') detail = `${step.agrees ? 'Agreed' : 'Challenged'} — ${(step.critique||'').slice(0,120)}`;
+    if (role === 'judge') detail = `Final: ${(step.final_types||[]).join(', ')} | Code written: ${step.wrote_code ? 'yes' : 'no'} — ${(step.reasoning||'').slice(0,120)}`;
+    if (role === 'test_pipeline') detail = `Source: ${step.source_file}`;
+    return `<div class="reasoning-step"><span class="${cls}">${role.toUpperCase()}</span> ${detail}</div>`;
+  }).join('');
+  return `
+    <div class="reasoning-block">
+      <div class="reasoning-toggle" onclick="toggleReasoning(this)">
+        <span>LLM reasoning chain</span><span>▾</span>
+      </div>
+      <div class="reasoning-body">${steps}</div>
+    </div>`;
+}
+
+function toggleReasoning(el) {
+  const body = el.nextElementSibling;
+  body.classList.toggle('open');
+  el.querySelector('span:last-child').textContent = body.classList.contains('open') ? '▴' : '▾';
+}
+
+function showMetrics(keyMetrics) {
+  const panel = document.getElementById('metrics-panel');
+  const grid = document.getElementById('metrics-grid');
+  if (!keyMetrics || !Object.keys(keyMetrics).length) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+  grid.innerHTML = Object.entries(keyMetrics).map(([k, v]) =>
+    `<div class="metric-chip">${k.replace(/_/g,' ')}: <span>${v}</span></div>`
+  ).join('');
+}
+
+// ── Test pipeline ─────────────────────────────────────────────────────────────
+async function runTest(synthKey) {
+  const prompts = {
+    synthdata6: 'Perform a complete portfolio risk assessment for my holdings in META, PLTR, and SPY',
+    synthdata7: 'Deep dive on META fundamentals, recent price history impact on my position',
+    synthdata8: 'Suggest portfolio rebalancing for META, PLTR, SPY based on current positions',
+    synthdata9: 'Compare META and PLTR fundamentals and position performance',
+    synthdata1: 'synthdata1',
+    synthdata2: 'synthdata2',
+    synthdata4: 'synthdata4',
+    synthdata5: 'synthdata5'
+  };
+  const prompt = prompts[synthKey] || synthKey;
+  addMsg(prompt, 'user');
+  await callBackend('/walker/test_prompt', { prompt, session_id: sessionId, synth_file: synthKey + '.json' });
+}
+
+// ── Main send ─────────────────────────────────────────────────────────────────
+async function sendMessage() {
+  const input = document.getElementById('user-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  addMsg(msg, 'user');
+  await callBackend('/walker/analyze_prompt', { prompt: msg, session_id: sessionId });
+}
+
+async function callBackend(endpoint, payload) {
+  const btn = document.getElementById('send-btn');
+  const input = document.getElementById('user-input');
+  btn.disabled = true;
+  input.disabled = true;
+
+  const loading = addMsg('Running 3-LLM pipeline...', 'loading');
+
+  try {
+    const res = await fetch(`${JAC}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const json = await res.json();
+
+    if (json.error) {
+      loading.remove();
+      addMsg('Error: ' + json.error, 'error');
+      return;
+    }
+
+    if (!json.reports || !json.reports[0]) {
+      loading.remove();
+      addMsg('No data returned from backend.', 'error');
+      return;
+    }
+
+    const report = json.reports[0];
+    const rendered = report.rendered_payload || {};
+    const quant = report.quant_summary || {};
+
+    loading.remove();
+    addMsg(
+      (rendered.agent_message || quant.summary_text || 'Analysis complete.') +
+      renderReasoningChain(rendered.reasoning_chain),
+      'agent'
+    );
+
+    showMetrics(quant.key_metrics);
+
+    if (rendered.plot_json && !rendered.plot_json.error) {
+      addChartCard(report, rendered);
+    } else if (rendered.plot_json?.error) {
+      addMsg('Chart code error: ' + rendered.plot_json.error, 'error');
+    }
+
+  } catch(e) {
+    loading.remove();
+    addMsg('Connection error: ' + e.message, 'error');
+  }
+
+  btn.disabled = false;
+  input.disabled = false;
+  input.focus();
+}
+
+// ── Chart rendering ───────────────────────────────────────────────────────────
+function addChartCard(report, rendered) {
+  document.getElementById('empty-state').style.display = 'none';
+  const id = 'chart-' + Date.now();
+  const title = report.quant_summary?.title || report.prompt || 'Chart';
+  const chartType = rendered.chart_type || 'custom';
+  const plotlyCode = rendered.plotly_code || '';
+  const alts = (rendered.alternatives || []).slice(0, 3);
+
+  const altBtns = alts.map(a =>
+    `<button class="alt-btn" onclick="requestAltChart('${id}','${a}')">${a}</button>`
+  ).join('');
+
+  const card = document.createElement('div');
+  card.className = 'chart-card';
+  card.id = id;
+  card.innerHTML = `
+    <div class="chart-card-header">
+      <span class="chart-title">${title}</span>
+      <span class="chart-badge">${chartType}</span>
+      <div class="chart-card-actions">
+        ${altBtns}
+        <button class="remove-btn" onclick="removeChart('${id}')">✕</button>
+      </div>
+    </div>
+    <div class="chart-plot" id="plot-${id}"></div>
+    <div class="chart-modify-area">
+      <input id="mod-${id}" placeholder="Modify chart... e.g. 'add a trendline' or 'change to dark red bars'"
+             onkeydown="if(event.key==='Enter')modifyChart('${id}')"/>
+      <button class="modify-btn" id="modbtn-${id}" onclick="modifyChart('${id}')">Apply</button>
+    </div>
+    <div class="code-toggle" onclick="toggleCode('${id}')">
+      <span>View generated code</span><span>▾</span>
+    </div>
+    <div class="code-block" id="code-${id}">
+      <pre id="codepre-${id}">${escapeHtml(plotlyCode)}</pre>
+    </div>
+  `;
+
+  document.getElementById('charts-grid').appendChild(card);
+  charts.push({ id, report, rendered, plotlyCode });
+  renderPlot(id, rendered.plot_json);
+  updateChartCount();
+}
+
+function renderPlot(id, plotJson) {
+  if (!plotJson || plotJson.error) return;
+
+  const layout = {
+    ...(plotJson.layout || {}),
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#e0e0e0', family: 'Segoe UI', size: 11 },
+    margin: { t: 44, b: 44, l: 54, r: 24 },
+    xaxis: { ...(plotJson.layout?.xaxis || {}), gridcolor: '#2e3147', color: '#888' },
+    yaxis: { ...(plotJson.layout?.yaxis || {}), gridcolor: '#2e3147', color: '#888' }
+  };
+
+  Plotly.newPlot(`plot-${id}`, plotJson.data || [], layout, {
+    responsive: true,
+    displayModeBar: true
+  });
+}
+
+function toggleCode(id) {
+  const block = document.getElementById(`code-${id}`);
+  const toggle = block.previousElementSibling;
+  block.classList.toggle('open');
+  toggle.querySelector('span:last-child').textContent = block.classList.contains('open') ? '▴' : '▾';
+}
+
+function escapeHtml(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Chart modification ────────────────────────────────────────────────────────
+async function modifyChart(id) {
+  const entry = charts.find(c => c.id === id);
+  if (!entry) return;
+
+  const modInput = document.getElementById(`mod-${id}`);
+  const mod = modInput.value.trim();
+  if (!mod) return;
+  modInput.value = '';
+
+  const btn = document.getElementById(`modbtn-${id}`);
+  btn.textContent = '...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(`${JAC}/walker/modify_chart`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        existing_code: entry.plotlyCode,
+        modification: mod,
+        session_id: sessionId
+      })
+    });
+
+    const json = await res.json();
+    const result = json.reports?.[0];
+
+    if (!result) {
+      addMsg('Modify failed — no response.', 'error');
+      return;
+    }
+
+    if (result.needs_new_data) {
+      addMsg(
+        `Needs new data.<br><b>Reason:</b> ${result.reason}<br>Suggested: "<i>${result.new_prompt}</i>"`,
+        'agent'
+      );
+      document.getElementById('user-input').value = result.new_prompt;
+    } else {
+      entry.plotlyCode = result.updated_code;
+      entry.rendered.plot_json = result.plot_json;
+
+      document.getElementById(`codepre-${id}`).textContent = result.updated_code;
+      renderPlot(id, result.plot_json);
+      addMsg('Chart updated.', 'agent');
+    }
+
+  } catch(e) {
+    addMsg('Modify error: ' + e.message, 'error');
+  }
+
+  btn.textContent = 'Apply';
+  btn.disabled = false;
+}
+
+async function requestAltChart(id, altType) {
+  document.getElementById(`mod-${id}`).value = `Change chart type to ${altType}`;
+  await modifyChart(id);
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function removeChart(id) {
+  document.getElementById(id)?.remove();
+  charts = charts.filter(c => c.id !== id);
+  updateChartCount();
+  if (!charts.length) document.getElementById('empty-state').style.display = 'flex';
+}
+
+function updateChartCount() {
+  const n = charts.length;
+  document.getElementById('chart-count').textContent = n ? `${n} chart${n > 1 ? 's' : ''}` : '';
+  document.getElementById('download-btn').disabled = n === 0;
+}
+
+async function downloadPDF() {
+  if (!charts.length) return;
+  document.getElementById('pdf-overlay').classList.add('show');
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF('landscape', 'mm', 'a4');
+  const grid = document.getElementById('charts-grid');
+  try {
+    const canvas = await html2canvas(grid, { backgroundColor: '#0f1117', scale: 1.5, useCORS: true });
+    const img = canvas.toDataURL('image/png');
+    const pw = pdf.internal.pageSize.getWidth();
+    const ph = pdf.internal.pageSize.getHeight();
+    const imgH = (canvas.height * pw) / canvas.width;
+    let y = 0;
+    while (y < imgH) {
+      if (y > 0) pdf.addPage();
+      pdf.addImage(img, 'PNG', 0, -y, pw, imgH);
+      y += ph;
+    }
+    pdf.save('joatberg-dashboard.pdf');
+  } catch(e) {
+    alert('PDF failed: ' + e.message);
+  }
+  document.getElementById('pdf-overlay').classList.remove('show');
+}
+</script>
+</body>
+</html>

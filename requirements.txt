@@ -1,0 +1,19 @@
+# Jac/Jaseci graph runtime
+jaclang>=0.7.0
+
+# LLM client
+groq>=0.9.0
+
+# Visualization
+plotly>=5.20.0
+
+# Web framework / HTTP server
+fastapi>=0.110.0
+uvicorn>=0.29.0
+
+# ACP agent protocol (for DataSpell integration)
+agent-client-protocol>=0.9.0
+
+# Core utilities
+pydantic>=2.0.0
+requests>=2.31.0
