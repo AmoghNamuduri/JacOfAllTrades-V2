@@ -1,5 +1,7 @@
 # JacOfAllTrades
 
+Submitted to **JacHacks** at **University of Michigan - Ann Arbor**
+
 A financial data visualization agent built on [Jaclang](https://www.jac-lang.org/). Takes natural language prompts and returns interactive Plotly charts backed by a 3-stage LLM reasoning pipeline.
 
 ## How it works
